@@ -26,4 +26,4 @@ def encode_smiles(smiles, max_length, start_token, end_token):
         for jdx, letter in enumerate(smile):
             features[idx, jdx] = smiles_encoder[letter]
         features[idx, length] = smiles_encoder[end_token]
-    return features
+    return features, len(smiles_encoder)
