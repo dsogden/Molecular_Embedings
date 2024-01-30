@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 from utils import get_smiles, encode_smiles, train_step
 
-path = 'tox21.csv'
+path = './tox21.csv'
 df = pd.read_csv(path)
 smiles = get_smiles(df, 25)
 
