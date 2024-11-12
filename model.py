@@ -3,51 +3,72 @@ from torch import nn
 import torch.nn.functional as F
 
 class Encoder(nn.Module):
-    def __init__(self, input_size, embedding_size, hidden_size, n_layers):
-        super(Encoder, self).__init__()
-        self.input_size = input_size
-        self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
-        self.n_layers = n_layers
-
-        self.embedding = nn.Embedding(self.input_size, self.embedding_size)
-        self.recurrent = nn.LSTM(self.embedding_size, self.hidden_size, self.n_layers, batch_first=True)
+    def __init__(
+            self, num_embeddings: int, embedding_size: int, max_length: int, num_layers: int
+        ):
+        super().__init__()
+        self.embedding = Embedding(num_embeddings, embedding_size)
+        self.positional_encoding = PositionalEncoding(
+            max_length, embedding_size
+        )
+        self.encoder = nn.GRU(
+            embedding_size, embedding_size, batch_first=True, num_layers=num_layers
+        )
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, inputs):
-        embedded = self.embedding(inputs)
-        outputs, (hidden, cell) = self.recurrent(embedded)
-        return outputs, hidden, cell
+        embedding = self.embedding(inputs)
+        encoded = self.positional_encoding(embedding)
+        rnn, hidden = self.encoder(encoded)
+        return self.dropout(rnn), hidden
+
+class BahdanauAttention(nn.Module):
+    def __init__(self, hidden_size: int):
+        super(BahdanauAttention, self).__init__()
+        self.Wa = nn.Linear(hidden_size, hidden_size)
+        self.Ua = nn.Linear(hidden_size, hidden_size)
+        self.Va = nn.Linear(hidden_size, 1)
+
+    def forward(self, query, keys):
+        scores = self.Va(torch.tanh(self.Wa(query) + self.Ua(keys)))
+        scores = scores.permute(0, 2, 1)
+        weights = F.softmax(scores, dim=-1)
+        context = torch.bmm(weights, keys)
+        return context
 
 class Decoder(nn.Module):
-    def __init__(self, input_size, embedding_size, hidden_size, output_size, n_layers):
-      super(Decoder, self).__init__()
-      self.input_size = input_size
-      self.embedding_size = embedding_size
-      self.hidden_size = hidden_size
-      self.output_size = output_size
-      self.n_layers = n_layers
-    
-      self.embedding = nn.Embedding(self.input_size, self.embedding_size)
-      self.recurrent = nn.LSTM(self.embedding_size, self.hidden_size, self.n_layers, batch_first=True)
-      self.logits = nn.Linear(self.hidden_size, self.output_size)
-    
-    def forward(self, hidden, labels):
-      batch_size = 32
-      decoder_input = torch.zeros(batch_size, 1, dtype=torch.long)
-      decoder_outputs = []
-    
-      for i in range(26):
-          embedded = F.relu(self.embedding(decoder_input))
-          outputs, hidden = self.recurrent(embedded, hidden)
-          logits = self.logits(outputs)
-          decoder_outputs.append(logits)
-    
-          if labels is not None:
-              decoder_input = labels[:, i].unsqueeze(1)
-          else:
-              _, topi = logits.topk(1)
-              decoder_input = topi.squeeze(-1).detach()
-    
-      decoder_outputs = torch.cat(decoder_outputs, dim=1)
-      decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
-      return decoder_outputs
+    def __init__(
+            self, num_embeddings: int, embedding_size: int, max_length: int,
+            output_size: int, num_layers: int
+        ):
+        super().__init__()
+        self.embedding = Embedding(num_embeddings, embedding_size)
+        self.positional_encoding = PositionalEncoding(
+            max_length, embedding_size
+        )
+        self.attention = BahdanauAttention(embedding_size)
+        self.decoder = nn.GRU(
+            embedding_size, embedding_size, batch_first=True, num_layers=num_layers
+        )
+        self.fc = nn.Linear(embedding_size, output_size)
+
+    def forward(self, inputs, hidden):
+        embedding = self.embedding(inputs)
+        encoded = self.positional_encoding(embedding)
+        query = hidden.permute(1, 0, 2)
+        context = self.attention(query, encoded)
+        rnn, _ = self.decoder(encoded + context, hidden)
+        output = F.log_softmax(self.fc(rnn), dim=-1)
+        B, T, C = output.shape
+        return output.view(B * T, C)
+
+class Seq2Seq(nn.Module):
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, e_inputs, d_inputs):
+        rnn, hidden = self.encoder(e_inputs)
+        output = self.decoder(d_inputs, hidden)
+        return output
