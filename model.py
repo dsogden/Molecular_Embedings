@@ -12,7 +12,7 @@ class Embedding(nn.Module):
         return self.dropout(self.embedding(inputs))
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, input_dim: int, embedding_dim: int):
+    def __init__(self, input_dim: int, embedding_dim: int, device: str):
         super().__init__()
         self.dropout = nn.Dropout(0.1)
         span = torch.arange(input_dim).unsqueeze(1)
