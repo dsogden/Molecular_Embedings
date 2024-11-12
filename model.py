@@ -59,7 +59,7 @@ class BahdanauAttention(nn.Module):
         scores = self.Va(torch.tanh(self.Wa(query) + self.Ua(keys)))
         scores = scores.permute(0, 2, 1)
         weights = F.softmax(scores, dim=-1)
-        context = torch.bmm(weights, keys)
+        context = torch.matmul(weights, keys)
         return context
 
 class Decoder(nn.Module):
