@@ -2,6 +2,32 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+class Embedding(nn.Module):
+    def __init__(self, num_embeddings: int, embedding_size: int):
+        super().__init__()
+        self.embedding = nn.Embedding(num_embeddings, embedding_size)
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, inputs):
+        return self.dropout(self.embedding(inputs))
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, input_dim: int, embedding_dim: int):
+        super().__init__()
+        self.dropout = nn.Dropout(0.1)
+        span = torch.arange(input_dim).unsqueeze(1)
+        self.pos = torch.zeros(
+            (input_dim, embedding_dim), requires_grad=False
+        ).to(device)
+        x = torch.arange(embedding_dim // 2).float()
+        div_term = torch.exp(x * (-math.log(10000) / embedding_dim))
+        self.pos[:, 0::2] = torch.sin(span * div_term)
+        self.pos[:, 1::2] = torch.cos(span * div_term)
+        self.register_buffer('pe', self.pos)
+
+    def forward(self, inputs):
+        return self.dropout(inputs + self.pos)
+
 class Encoder(nn.Module):
     def __init__(
             self, num_embeddings: int, embedding_size: int, max_length: int, num_layers: int
